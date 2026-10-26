@@ -9,10 +9,6 @@ const sanitizeKey = (key: string): string => {
   return key.replace(/[^a-zA-Z0-9._-]/g, "_");
 };
 
-const secureStoreOptions: SecureStore.SecureStoreOptions = {
-  keychainAccessible: SecureStore.WHEN_UNLOCKED,
-};
-
 export const storage = {
   get: async (key: string): Promise<string | null> => {
     const cleanKey = sanitizeKey(key);
@@ -27,7 +23,7 @@ export const storage = {
           val = window.localStorage.getItem(cleanKey);
         }
       } else {
-        val = await SecureStore.getItemAsync(cleanKey, secureStoreOptions);
+        val = await SecureStore.getItemAsync(cleanKey);
       }
       memoryCache.set(cleanKey, val);
       return val;
@@ -52,7 +48,7 @@ export const storage = {
         }
         return;
       }
-      await SecureStore.setItemAsync(cleanKey, safeValue, secureStoreOptions);
+      await SecureStore.setItemAsync(cleanKey, safeValue);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Storage set error:", error);
@@ -69,7 +65,7 @@ export const storage = {
         }
         return;
       }
-      await SecureStore.deleteItemAsync(cleanKey, secureStoreOptions);
+      await SecureStore.deleteItemAsync(cleanKey);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Storage remove error:", error);
