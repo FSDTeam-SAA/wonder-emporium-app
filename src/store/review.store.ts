@@ -21,7 +21,7 @@ interface ReviewStoreState {
   getReviewsForBook: (bookId: string) => BookReview[];
 }
 
-const STORAGE_KEY = "@wonder_book_reviews";
+const STORAGE_KEY = "wonder_book_reviews";
 
 const SEED_REVIEW_POOL: Array<Omit<BookReview, "id" | "bookId">> = [
   {

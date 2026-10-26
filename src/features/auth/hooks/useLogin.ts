@@ -11,7 +11,9 @@ export function useLogin() {
     mutationFn: (payload: LoginDto) => authService.login(payload),
     onSuccess: (data) => {
       Keyboard.dismiss();
-      setUser(data.user);
+      setTimeout(() => {
+        setUser(data.user);
+      }, 150);
     },
   });
 }

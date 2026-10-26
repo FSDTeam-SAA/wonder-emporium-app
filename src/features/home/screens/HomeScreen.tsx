@@ -208,9 +208,11 @@ export function HomeScreen() {
 
   const categories = [
     "All",
-    ...(categoriesData?.data?.categories?.map(
-      (c: { name: string }) => c.name,
-    ) || []),
+    ...(categoriesData?.data?.categories
+      ?.map((c: { name?: string } | string) =>
+        typeof c === "string" ? c : c?.name || "",
+      )
+      .filter((name: string) => Boolean(name && name.trim())) || []),
   ];
 
   const featuredBooks: FormattedBook[] = (booksData?.data?.books || [])
@@ -251,7 +253,11 @@ export function HomeScreen() {
     [handleBookPress],
   );
 
-  const keyExtractor = useCallback((item: FormattedBook) => item.id, []);
+  const keyExtractor = useCallback(
+    (item: FormattedBook, index: number) =>
+      item?.id ? String(item.id) : String(index),
+    [],
+  );
 
   return (
     <ImageBackground
