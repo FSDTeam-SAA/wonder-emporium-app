@@ -18,6 +18,7 @@ workflows:
         XCODE_SCHEME: "wondermobile"
         APP_STORE_APPLE_ID: 6806753725
         EXPO_PUBLIC_API_URL: "https://api.thewonderemporium.com/v1"
+        EXPO_USE_PRECOMPILED_MODULES: "0"
       node: 22
       xcode: latest
       cocoapods: default

@@ -49,6 +49,15 @@
           "photosPermission": "Allow Wonder Emporium to access your photos to set your profile picture.",
           "cameraPermission": "Allow Wonder Emporium to access your camera to take a profile picture."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "usePrecompiledModules": false,
+            "deploymentTarget": "16.4"
+          }
+        }
       ]
     ],
     "extra": {
