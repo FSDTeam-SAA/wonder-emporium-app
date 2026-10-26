@@ -70,11 +70,13 @@ export function BookListScreen({ route, navigation }: Props) {
     id: b.id,
     title: b.title,
     author: b.author?.profile?.firstName
-      ? `${b.author.profile.firstName} ${b.author.profile.lastName}`
+      ? `${b.author.profile.firstName} ${b.author.profile.lastName || ""}`.trim()
       : b.author?.username || "Unknown Author",
-    price: b.formats?.[0]?.listPrice
-      ? `$${b.formats[0].listPrice.toFixed(2)}`
-      : "Free",
+    price:
+      b.formats?.[0]?.listPrice != null &&
+      !isNaN(Number(b.formats[0].listPrice))
+        ? `$${Number(b.formats[0].listPrice).toFixed(2)}`
+        : "Free",
     rating: "4.8",
     coverUrl:
       b.bookCover ||

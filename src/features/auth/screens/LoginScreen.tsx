@@ -1,4 +1,11 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Keyboard,
+} from "react-native";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Colors } from "@/styles/colors";
@@ -33,6 +40,7 @@ export function LoginScreen() {
   });
 
   const onSubmit = (data: LoginFormData) => {
+    Keyboard.dismiss();
     loginMutation.mutate(data);
   };
 
@@ -109,6 +117,8 @@ export function LoginScreen() {
               error={errors.email?.message}
               keyboardType="email-address"
               autoCapitalize="none"
+              textContentType="username"
+              autoComplete="username"
             />
           )}
         />
@@ -123,6 +133,8 @@ export function LoginScreen() {
               onChangeText={onChange}
               error={errors.password?.message}
               isPassword
+              textContentType="password"
+              autoComplete="current-password"
             />
           )}
         />

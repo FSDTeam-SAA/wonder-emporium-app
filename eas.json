@@ -14,13 +14,13 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://2.25.80.41/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.thewonderemporium.com/v1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://2.25.80.41/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.thewonderemporium.com/v1"
       }
     }
   },

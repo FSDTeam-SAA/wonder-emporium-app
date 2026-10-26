@@ -41,7 +41,7 @@ export interface ReadingChallengeState {
   ) => Promise<Trophy[]>;
 }
 
-const STORAGE_KEY = "@wonder_reading_challenges_v1";
+const STORAGE_KEY = "wonder_reading_challenges_v1";
 
 export const DEFAULT_TROPHIES: Trophy[] = [
   {

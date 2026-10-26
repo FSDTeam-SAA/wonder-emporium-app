@@ -4,22 +4,32 @@ import { Platform } from "react-native";
 // In-memory cache to prevent frequent slow native SecureStore bridge roundtrips
 const memoryCache = new Map<string, string | null>();
 
+// iOS Keychain only allows alphanumeric characters, '.', '-', and '_'
+const sanitizeKey = (key: string): string => {
+  return key.replace(/[^a-zA-Z0-9._-]/g, "_");
+};
+
+const secureStoreOptions: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED,
+};
+
 export const storage = {
   get: async (key: string): Promise<string | null> => {
-    if (memoryCache.has(key)) {
-      return memoryCache.get(key) ?? null;
+    const cleanKey = sanitizeKey(key);
+    if (memoryCache.has(cleanKey)) {
+      return memoryCache.get(cleanKey) ?? null;
     }
 
     try {
       let val: string | null = null;
       if (Platform.OS === "web") {
         if (typeof window !== "undefined" && window.localStorage) {
-          val = window.localStorage.getItem(key);
+          val = window.localStorage.getItem(cleanKey);
         }
       } else {
-        val = await SecureStore.getItemAsync(key);
+        val = await SecureStore.getItemAsync(cleanKey, secureStoreOptions);
       }
-      memoryCache.set(key, val);
+      memoryCache.set(cleanKey, val);
       return val;
     } catch {
       return null;
@@ -27,19 +37,22 @@ export const storage = {
   },
 
   getFast: (key: string): string | null => {
-    return memoryCache.get(key) ?? null;
+    const cleanKey = sanitizeKey(key);
+    return memoryCache.get(cleanKey) ?? null;
   },
 
   set: async (key: string, value: string): Promise<void> => {
-    memoryCache.set(key, value);
+    const cleanKey = sanitizeKey(key);
+    const safeValue = typeof value === "string" ? value : String(value ?? "");
+    memoryCache.set(cleanKey, safeValue);
     try {
       if (Platform.OS === "web") {
         if (typeof window !== "undefined" && window.localStorage) {
-          window.localStorage.setItem(key, value);
+          window.localStorage.setItem(cleanKey, safeValue);
         }
         return;
       }
-      await SecureStore.setItemAsync(key, value);
+      await SecureStore.setItemAsync(cleanKey, safeValue, secureStoreOptions);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Storage set error:", error);
@@ -47,15 +60,16 @@ export const storage = {
   },
 
   remove: async (key: string): Promise<void> => {
-    memoryCache.delete(key);
+    const cleanKey = sanitizeKey(key);
+    memoryCache.delete(cleanKey);
     try {
       if (Platform.OS === "web") {
         if (typeof window !== "undefined" && window.localStorage) {
-          window.localStorage.removeItem(key);
+          window.localStorage.removeItem(cleanKey);
         }
         return;
       }
-      await SecureStore.deleteItemAsync(key);
+      await SecureStore.deleteItemAsync(cleanKey, secureStoreOptions);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Storage remove error:", error);

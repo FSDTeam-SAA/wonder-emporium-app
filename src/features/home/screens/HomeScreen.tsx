@@ -109,7 +109,7 @@ const BookCard = memo(function BookCard(props: BookCardProps) {
       activeOpacity={0.7}
     >
       <View style={styles.bookCover}>
-        {imageUrl ? (
+        {typeof imageUrl === "string" && imageUrl.trim().length > 0 ? (
           <ExpoImage
             source={{ uri: imageUrl }}
             style={styles.bookCoverImage}
@@ -219,11 +219,13 @@ export function HomeScreen() {
       id: b.id,
       title: b.title,
       author: b.author?.profile?.firstName
-        ? `${b.author.profile.firstName} ${b.author.profile.lastName}`
+        ? `${b.author.profile.firstName} ${b.author.profile.lastName || ""}`.trim()
         : b.author?.username || "Unknown Author",
-      price: b.formats?.[0]?.listPrice
-        ? `$${b.formats[0].listPrice.toFixed(2)}`
-        : "Free",
+      price:
+        b.formats?.[0]?.listPrice != null &&
+        !isNaN(Number(b.formats[0].listPrice))
+          ? `$${Number(b.formats[0].listPrice).toFixed(2)}`
+          : "Free",
       rating: "4.8",
     }))
     .filter((b: FormattedBook) => {

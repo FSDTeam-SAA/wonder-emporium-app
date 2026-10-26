@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { Keyboard } from "react-native";
 import { authService } from "@/services/auth.service";
 import { useAuthStore } from "@/store";
 import type { LoginDto } from "../types";
@@ -9,6 +10,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (payload: LoginDto) => authService.login(payload),
     onSuccess: (data) => {
+      Keyboard.dismiss();
       setUser(data.user);
     },
   });
