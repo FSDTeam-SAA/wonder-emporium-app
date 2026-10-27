@@ -128,6 +128,16 @@ export const authService = {
     }
   },
 
+  deleteAccount: async (payload?: { password?: string }) => {
+    try {
+      const response = await authApi.deleteAccount(payload);
+      return response.data;
+    } finally {
+      await storage.remove(Constants.tokenKey);
+      await storage.remove(Constants.refreshTokenKey);
+    }
+  },
+
   forgotPassword: async (payload: ForgotPasswordDto) => {
     const response = await authApi.forgotPassword(payload);
     return response.data;

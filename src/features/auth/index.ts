@@ -7,6 +7,7 @@ export { useLogin } from "./hooks/useLogin";
 export { useRegister } from "./hooks/useRegister";
 export { useVerifyEmail } from "./hooks/useVerifyEmail";
 export { useLogout, useLogoutAll } from "./hooks/useLogout";
+export { useDeleteAccount } from "./hooks/useDeleteAccount";
 export { useForgotPassword } from "./hooks/useForgotPassword";
 export { useResetPassword } from "./hooks/useResetPassword";
 export type {

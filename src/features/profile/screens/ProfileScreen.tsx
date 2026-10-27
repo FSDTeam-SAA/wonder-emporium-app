@@ -21,7 +21,7 @@ import { authApi } from "@/api";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { ProfileStackParamList } from "@/navigation/MainNavigator";
-import { useLogout } from "@/features/auth";
+import { useLogout, useDeleteAccount } from "@/features/auth";
 import { useReadingChallengeStore } from "@/store";
 
 const menuSections = [
@@ -49,6 +49,7 @@ export function ProfileScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const logoutMutation = useLogout();
+  const deleteAccountMutation = useDeleteAccount();
   const {
     annualTarget,
     completedBookIds,
@@ -79,6 +80,45 @@ export function ProfileScreen() {
           },
         },
       ]);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    const confirmDelete = () => {
+      deleteAccountMutation.mutate(undefined, {
+        onError: (err: unknown) => {
+          const msg =
+            (err as { response?: { data?: { message?: string } } })?.response
+              ?.data?.message || "Failed to delete account. Please try again.";
+          if (Platform.OS === "web") {
+            globalThis.alert(msg);
+          } else {
+            Alert.alert("Error", msg);
+          }
+        },
+      });
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = globalThis.confirm(
+        "Are you sure you want to delete your account? All your profile information and data will be permanently removed. This action cannot be undone.",
+      );
+      if (confirmed) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert(
+        "Delete Account",
+        "Are you sure you want to delete your account? All your profile information and data will be permanently removed. This action cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete Account",
+            style: "destructive",
+            onPress: confirmDelete,
+          },
+        ],
+      );
     }
   };
 
@@ -231,13 +271,30 @@ export function ProfileScreen() {
           <TouchableOpacity
             style={styles.logoutBtn}
             onPress={handleLogout}
-            disabled={logoutMutation.isPending}
+            disabled={
+              logoutMutation.isPending || deleteAccountMutation.isPending
+            }
             activeOpacity={0.7}
           >
             {logoutMutation.isPending ? (
               <ActivityIndicator color="#EF4444" />
             ) : (
               <Text style={styles.logoutText}>Log out</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={handleDeleteAccount}
+            disabled={
+              logoutMutation.isPending || deleteAccountMutation.isPending
+            }
+            activeOpacity={0.7}
+          >
+            {deleteAccountMutation.isPending ? (
+              <ActivityIndicator color="#DC2626" />
+            ) : (
+              <Text style={styles.deleteText}>Delete Account</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -369,4 +426,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
   },
   logoutText: { ...Typography.button, color: "#EF4444", fontWeight: "700" },
+  deleteBtn: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    borderWidth: 1.5,
+    borderColor: "#DC2626",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#FFF1F2",
+  },
+  deleteText: { ...Typography.button, color: "#DC2626", fontWeight: "700" },
 });

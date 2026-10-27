@@ -57,6 +57,9 @@ export const authApi = {
   changePassword: (payload: { oldPassword: string; newPassword: string }) =>
     api.post("/auth/change-password", payload),
 
+  deleteAccount: (payload?: { password?: string }) =>
+    api.delete("/auth/account", { data: payload }),
+
   getGoogleAuthUrl: () => api.get("/auth/google"),
 
   googleCallbackPost: (payload: SocialAuthDto) =>
