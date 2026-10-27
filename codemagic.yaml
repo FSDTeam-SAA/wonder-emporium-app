@@ -26,12 +26,22 @@ workflows:
       - name: Install npm dependencies
         script: |
           npm install
+          # Remove precompiled XCFramework tarballs shipped in npm to force building from source
+          rm -rf node_modules/expo-image/prebuilds/output
+          rm -rf node_modules/expo-modules-core/prebuilds/output
       - name: Generate iOS project
         script: |
           npx expo prebuild --platform ios --clean --no-install
+      - name: Clean CocoaPods cache
+        script: |
+          pod cache clean --all || true
+          rm -rf ~/Library/Caches/CocoaPods
+          rm -rf ~/Library/Developer/Xcode/DerivedData
       - name: Install CocoaPods dependencies
         script: |
-          cd ios && pod install
+          cd ios
+          export EXPO_USE_PRECOMPILED_MODULES=0
+          pod install
       - name: Set up code signing settings on Xcode project
         script: |
           xcode-project use-profiles --warn-only
