@@ -47,3 +47,4 @@ husky/.gitignore
 *.apk
 *.aab
 
+config.bat
