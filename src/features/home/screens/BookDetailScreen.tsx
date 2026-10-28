@@ -24,8 +24,9 @@ import bgImage from "@/assets/onboarding/onboarding bg.png";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { HomeStackParamList } from "@/navigation/MainNavigator";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cartApi, libraryApi, LibraryItem, bookApi } from "@/api";
+import { cartApi, libraryApi, LibraryItem, bookApi, authorApi } from "@/api";
 import { useWishlistStore, useReviewStore, useAuthStore } from "@/store";
+import { getAuthorDisplayName } from "@/utils";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "BookDetail">;
 
@@ -55,8 +56,15 @@ interface BookApiItem {
   [key: string]: unknown;
 }
 
-const formats = ["eBook", "Paperback", "Audiobook", "Hardcover"];
-const categories = ["Leadership", "Business", "Faith", "Personal Growth"];
+function formatTypeName(fmt?: string): string {
+  if (!fmt) return "eBook";
+  const upper = fmt.toUpperCase();
+  if (upper === "EBOOK" || upper === "DIGITAL") return "eBook";
+  if (upper === "AUDIOBOOK") return "Audiobook";
+  if (upper === "PAPERBACK") return "Paperback";
+  if (upper === "HARDCOVER") return "Hardcover";
+  return fmt;
+}
 
 const RATING_LABELS: Record<number, string> = {
   5: "★★★★★ Exceptional — Highly Recommended",
@@ -121,10 +129,112 @@ function BookCardSm({
 }
 
 export function BookDetailScreen({ route, navigation }: Props) {
-  const { book } = route.params;
-  const [selectedFormat, setSelectedFormat] = useState<string>("DIGITAL");
+  const { book: initialBook } = route.params;
 
-  const isWishlisted = useWishlistStore((state) => state.isInWishlist(book.id));
+  // Live book details query to sync data uploaded from the website
+  const { data: liveBookRes } = useQuery({
+    queryKey: ["book", initialBook.id],
+    queryFn: async () => {
+      const res = await bookApi.getById(initialBook.id);
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const liveBookData = liveBookRes?.data || liveBookRes;
+  const activeBook = {
+    ...initialBook,
+    ...(liveBookData || {}),
+  };
+
+  const resolvedAuthorName = getAuthorDisplayName(activeBook);
+
+  // Author details query (bio, book count, avatar)
+  const authorId =
+    (activeBook as { authorId?: string })?.authorId ||
+    (activeBook.author as { id?: string } | undefined)?.id;
+
+  const { data: authorDataRes } = useQuery({
+    queryKey: ["author-detail", authorId],
+    queryFn: async () => {
+      if (!authorId) return null;
+      try {
+        const res = await authorApi.getFoundingAuthorById(authorId);
+        return res.data?.data || res.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: Boolean(authorId),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const authorDetails = authorDataRes;
+  const authorProfile =
+    authorDetails?.profile ||
+    (
+      activeBook.author as {
+        profile?: {
+          firstName?: string;
+          lastName?: string;
+          bio?: string;
+          avatarUrl?: string;
+        };
+      }
+    )?.profile;
+
+  const authorAvatarUrl =
+    authorProfile?.avatarUrl ||
+    (authorDetails as { avatarUrl?: string })?.avatarUrl;
+
+  const authorBio =
+    authorProfile?.bio ||
+    (authorDetails as { bio?: string })?.bio ||
+    `${resolvedAuthorName} is an author at Wonder Emporium, creating inspiring and captivating stories for readers worldwide.`;
+
+  const authorBookCount = authorDetails?.bookCount || 1;
+  const isFoundingAuthor = Boolean(
+    authorDetails?.isFoundingAuthor ||
+    (activeBook.author as { isFoundingAuthor?: boolean })?.isFoundingAuthor,
+  );
+
+  const rawFormats =
+    (activeBook.formats as
+      | Array<{
+          id: string;
+          formatType?: string;
+          listPrice?: number;
+          sellingPrice?: number;
+        }>
+      | undefined) || [];
+
+  const availableFormats =
+    rawFormats.length > 0
+      ? rawFormats
+      : [{ id: "ebook", formatType: "EBOOK", listPrice: 7.99 }];
+
+  const [selectedFormatId, setSelectedFormatId] = useState<string>(
+    availableFormats[0]?.id || "",
+  );
+
+  useEffect(() => {
+    if (
+      availableFormats.length > 0 &&
+      !availableFormats.some((f) => f.id === selectedFormatId)
+    ) {
+      setSelectedFormatId(availableFormats[0].id);
+    }
+  }, [availableFormats, selectedFormatId]);
+
+  const selectedFormatObj =
+    availableFormats.find((f) => f.id === selectedFormatId) ||
+    availableFormats[0];
+
+  const selectedFormatName = formatTypeName(selectedFormatObj?.formatType);
+
+  const isWishlisted = useWishlistStore((state) =>
+    state.isInWishlist(activeBook.id),
+  );
   const toggleWishlist = useWishlistStore((state) => state.toggleWishlist);
   const [descExpanded, setDescExpanded] = useState(false);
   const [loadingAction, setLoadingAction] = useState<"cart" | "buy" | null>(
@@ -135,7 +245,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  }, [book.id]);
+  }, [activeBook.id]);
 
   // Dynamic reviews integration
   const { initReviews, addReview, getReviewsForBook } = useReviewStore();
@@ -145,7 +255,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
     initReviews();
   }, [initReviews]);
 
-  const reviews = getReviewsForBook(book.id);
+  const reviews = getReviewsForBook(activeBook.id);
 
   const avgRating =
     reviews.length > 0
@@ -174,11 +284,9 @@ export function BookDetailScreen({ route, navigation }: Props) {
     approvedBooksData?.data?.books || approvedBooksData?.books || [];
 
   const popularAudiobooks = rawApproved
-    .filter((b) => b.id !== book.id)
+    .filter((b) => b.id !== activeBook.id)
     .map((b) => {
-      const author = b.author?.profile?.firstName
-        ? `${b.author.profile.firstName} ${b.author.profile.lastName}`
-        : b.author?.username || "Wonder Author";
+      const author = getAuthorDisplayName(b);
 
       const audioFormat =
         b.formats?.find((f) => f.formatType === "AUDIOBOOK") || b.formats?.[0];
@@ -225,30 +333,48 @@ export function BookDetailScreen({ route, navigation }: Props) {
   };
 
   const coverUrl =
-    book?.bookCover ||
-    book?.coverUrl ||
-    book?.cover ||
-    (book?.files as Array<{ type?: string; url?: string }> | undefined)?.find(
-      (f) => f.type === "COVER",
-    )?.url;
+    activeBook?.bookCover ||
+    activeBook?.coverUrl ||
+    activeBook?.cover ||
+    (
+      activeBook?.files as Array<{ type?: string; url?: string }> | undefined
+    )?.find((f) => f.type === "COVER")?.url;
 
-  const formatsList = book?.formats as
-    Array<{ id: string; formatType?: string; listPrice?: number }> | undefined;
+  const ebookFile = (
+    activeBook?.files as Array<{ type?: string; url?: string }> | undefined
+  )?.find(
+    (f) =>
+      f.type === "EBOOK" ||
+      f.type === "PDF" ||
+      f.type === "PREVIEW" ||
+      (f.url && (f.url.endsWith(".pdf") || f.url.endsWith(".epub"))),
+  );
 
-  const selectedFormatObj =
-    formatsList?.find(
-      (f) => f.formatType?.toUpperCase() === selectedFormat.toUpperCase(),
-    ) || formatsList?.[0];
+  const previewFileUrl =
+    ebookFile?.url || (activeBook as { previewUrl?: string })?.previewUrl;
+
+  const handleOpenPreview = () => {
+    navigation.navigate("PdfReader", {
+      bookId: activeBook.id,
+      title: activeBook.title,
+      author: resolvedAuthorName,
+      coverUrl: coverUrl,
+      previewUrl: previewFileUrl,
+      fileUrl: previewFileUrl,
+      isPreview: true,
+      description: activeBook.description,
+    });
+  };
 
   const addToCartMutation = useMutation({
     mutationFn: async () => {
-      const formatId = selectedFormatObj?.id || formatsList?.[0]?.id;
+      const formatId = selectedFormatObj?.id || availableFormats[0]?.id;
 
       if (!formatId) {
         throw new Error("No available format for this book.");
       }
       return cartApi.addItem({
-        bookId: book.id,
+        bookId: activeBook.id,
         formatId: formatId,
         quantity: 1,
       });
@@ -288,9 +414,15 @@ export function BookDetailScreen({ route, navigation }: Props) {
     addToCartMutation.mutate();
   };
 
-  const displayPrice = selectedFormatObj?.listPrice
-    ? `$${selectedFormatObj.listPrice.toFixed(2)}`
-    : book.price || "$24.99";
+  const priceVal =
+    selectedFormatObj?.listPrice ??
+    selectedFormatObj?.sellingPrice ??
+    (activeBook as { sellingPrice?: number }).sellingPrice;
+
+  const displayPrice =
+    priceVal !== undefined && priceVal !== null && Number(priceVal) > 0
+      ? `$${Number(priceVal).toFixed(2)}`
+      : (activeBook.price as string) || "$7.99";
 
   const { data: libraryRes } = useQuery({
     queryKey: ["library"],
@@ -305,7 +437,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
     : (libraryRes as unknown as { data?: LibraryItem[] })?.data || [];
 
   const ownedLibraryItem = apiLibraryItems.find(
-    (item) => item.book?.id === book.id,
+    (item) => item.book?.id === activeBook.id,
   );
   const isOwned = Boolean(ownedLibraryItem);
 
@@ -357,7 +489,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
     }
     const name =
       reviewerNameInput.trim() || user?.username || "Verified Reader";
-    await addReview(book.id, {
+    await addReview(activeBook.id, {
       reviewerName: name,
       rating: newRating,
       comment: newComment.trim(),
@@ -371,7 +503,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
     );
   };
 
-  const isAudioSelected = selectedFormat.toLowerCase().includes("audio");
+  const isAudioSelected = selectedFormatName.toLowerCase().includes("audio");
 
   return (
     <ImageBackground
@@ -392,7 +524,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
         <Text style={styles.topBarTitle}>Book Details</Text>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => toggleWishlist(book)}
+          onPress={() => toggleWishlist(activeBook)}
         >
           <Ionicons
             name={isWishlisted ? "heart" : "heart-outline"}
@@ -410,19 +542,29 @@ export function BookDetailScreen({ route, navigation }: Props) {
       >
         {/* Book Hero */}
         <View style={styles.heroSection}>
-          {coverUrl ? (
-            <ExpoImage
-              source={{ uri: coverUrl }}
-              style={styles.heroImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-          ) : (
-            <View style={styles.heroImage}>
-              <Ionicons name="book" size={64} color={Colors.secondary} />
+          <TouchableOpacity
+            style={styles.heroCoverWrapper}
+            onPress={handleOpenPreview}
+            activeOpacity={0.88}
+          >
+            {coverUrl ? (
+              <ExpoImage
+                source={{ uri: coverUrl }}
+                style={styles.heroImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            ) : (
+              <View style={styles.heroImage}>
+                <Ionicons name="book" size={64} color={Colors.secondary} />
+              </View>
+            )}
+            <View style={styles.samplePill}>
+              <Ionicons name="eye-outline" size={13} color={Colors.white} />
+              <Text style={styles.samplePillText}>Tap to Preview</Text>
             </View>
-          )}
+          </TouchableOpacity>
           <View style={styles.heroDots}>
             <View style={[styles.dot, styles.dotActive]} />
             <View style={styles.dot} />
@@ -431,9 +573,9 @@ export function BookDetailScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.infoSection}>
-          <Text style={styles.bookTitle}>{book.title}</Text>
+          <Text style={styles.bookTitle}>{activeBook.title}</Text>
           <View style={styles.authorRow}>
-            <Text style={styles.bookAuthor}>by {book.author}</Text>
+            <Text style={styles.bookAuthor}>by {resolvedAuthorName}</Text>
             <Ionicons
               name="checkmark-circle"
               size={16}
@@ -465,18 +607,18 @@ export function BookDetailScreen({ route, navigation }: Props) {
               onPress={() => {
                 if (isAudioSelected) {
                   navigation.navigate("AudiobookPlayer", {
-                    bookId: book.id,
+                    bookId: activeBook.id,
                     orderItemId: ownedLibraryItem?.orderItemId,
-                    title: book.title,
-                    author: book.author,
+                    title: activeBook.title,
+                    author: resolvedAuthorName,
                     coverUrl: coverUrl,
                   });
                 } else {
                   navigation.navigate("PdfReader", {
-                    bookId: book.id,
+                    bookId: activeBook.id,
                     orderItemId: ownedLibraryItem?.orderItemId,
-                    title: book.title,
-                    author: book.author,
+                    title: activeBook.title,
+                    author: resolvedAuthorName,
                     coverUrl: coverUrl,
                   });
                 }
@@ -493,29 +635,46 @@ export function BookDetailScreen({ route, navigation }: Props) {
               </Text>
             </TouchableOpacity>
           ) : (
-            <View style={styles.actionRow}>
+            <View style={styles.actionContainer}>
               <TouchableOpacity
-                style={styles.addToCartBtn}
-                onPress={handleAddToCart}
-                disabled={addToCartMutation.isPending}
+                style={styles.samplePreviewBtn}
+                onPress={handleOpenPreview}
+                activeOpacity={0.8}
               >
-                {addToCartMutation.isPending && loadingAction === "cart" ? (
-                  <ActivityIndicator color={Colors.secondary} size="small" />
-                ) : (
-                  <Text style={styles.addToCartText}>ADD TO CART</Text>
-                )}
+                <Ionicons
+                  name="book-outline"
+                  size={18}
+                  color={Colors.secondary}
+                />
+                <Text style={styles.samplePreviewText}>
+                  READ SAMPLE PREVIEW
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.buyNowBtn}
-                onPress={handleBuyNow}
-                disabled={addToCartMutation.isPending}
-              >
-                {addToCartMutation.isPending && loadingAction === "buy" ? (
-                  <ActivityIndicator color={Colors.white} size="small" />
-                ) : (
-                  <Text style={styles.buyNowText}>BUY NOW</Text>
-                )}
-              </TouchableOpacity>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.addToCartBtn}
+                  onPress={handleAddToCart}
+                  disabled={addToCartMutation.isPending}
+                >
+                  {addToCartMutation.isPending && loadingAction === "cart" ? (
+                    <ActivityIndicator color={Colors.secondary} size="small" />
+                  ) : (
+                    <Text style={styles.addToCartText}>ADD TO CART</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.buyNowBtn}
+                  onPress={handleBuyNow}
+                  disabled={addToCartMutation.isPending}
+                >
+                  {addToCartMutation.isPending && loadingAction === "buy" ? (
+                    <ActivityIndicator color={Colors.white} size="small" />
+                  ) : (
+                    <Text style={styles.buyNowText}>BUY NOW</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
@@ -526,101 +685,142 @@ export function BookDetailScreen({ route, navigation }: Props) {
             style={styles.descriptionText}
             numberOfLines={descExpanded ? undefined : 4}
           >
-            In a quiet village nestled between mist-laden hills, a young woman
-            named Elara discovers an ancient lantern that holds the power to
-            reveal hidden truths. As she embarks on a journey to uncover its
-            origins, she finds herself entangled in a web of secrets, lost love,
-            and the timeless battle between light and shadow. Eleanor Whitfield
-            weaves a hauntingly beautiful tale of self-discovery and the quiet
-            strength found in solitude.
+            {activeBook.description ||
+              "No description has been provided for this book yet."}
           </Text>
-          <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)}>
-            <Text style={styles.readMore}>
-              {descExpanded ? "Show Less" : "Read More"}
-            </Text>
-          </TouchableOpacity>
+          {Boolean(
+            activeBook.description && activeBook.description.length > 180,
+          ) && (
+            <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)}>
+              <Text style={styles.readMore}>
+                {descExpanded ? "Show Less" : "Read More"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Book Format</Text>
           <View style={styles.formatRow}>
-            {formats.map((fmt) => (
-              <TouchableOpacity
-                key={fmt}
-                style={[
-                  styles.formatChip,
-                  selectedFormat === fmt && styles.formatChipSelected,
-                ]}
-                onPress={() => setSelectedFormat(fmt)}
-              >
-                <Text
+            {availableFormats.map((fmt) => {
+              const label = formatTypeName(fmt.formatType);
+              const isSelected = selectedFormatObj?.id === fmt.id;
+              const fmtPrice = fmt.listPrice
+                ? ` ($${Number(fmt.listPrice).toFixed(2)})`
+                : "";
+              return (
+                <TouchableOpacity
+                  key={fmt.id || fmt.formatType}
                   style={[
-                    styles.formatChipText,
-                    selectedFormat === fmt && styles.formatChipTextSelected,
+                    styles.formatChip,
+                    isSelected && styles.formatChipSelected,
                   ]}
+                  onPress={() => setSelectedFormatId(fmt.id)}
                 >
-                  {fmt}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      isSelected && styles.formatChipTextSelected,
+                    ]}
+                  >
+                    {label}
+                    {fmtPrice}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Book Selection</Text>
-          <View style={styles.categoryRow}>
-            {categories.map((cat) => (
-              <View key={cat} style={styles.categoryChip}>
-                <Text style={styles.categoryChipText}>{cat}</Text>
-              </View>
-            ))}
+        {(activeBook.category ? [activeBook.category.trim()] : []).concat(
+          Array.isArray(activeBook.tags) ? (activeBook.tags as string[]) : [],
+        ).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Categories & Tags</Text>
+            <View style={styles.categoryRow}>
+              {[
+                ...new Set(
+                  (activeBook.category
+                    ? [activeBook.category.trim()]
+                    : []
+                  ).concat(
+                    Array.isArray(activeBook.tags)
+                      ? (activeBook.tags as string[])
+                      : [],
+                  ),
+                ),
+              ].map((cat) => (
+                <View key={cat} style={styles.categoryChip}>
+                  <Text style={styles.categoryChipText}>{cat}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Book Information</Text>
-          <InfoRow label="Language" value="English" />
-          <InfoRow label="Pages" value="348" />
-          <InfoRow label="ISBN" value="978-1-9821-4477-0" />
-          <InfoRow label="Publication" value="March 12, 2024" />
-          <InfoRow label="Format" value="eBook" />
+          <InfoRow
+            label="Language"
+            value={(activeBook.language as string) || "English"}
+          />
+          <InfoRow label="Format" value={selectedFormatName} />
+          <InfoRow
+            label="ISBN"
+            value={(activeBook.isbn as string) || "Digital Edition"}
+          />
+          <InfoRow
+            label="Audience"
+            value={(activeBook.ageGroup as string) || "General"}
+          />
+          <InfoRow
+            label="Status"
+            value={
+              activeBook.status === "APPROVED"
+                ? "Official Release"
+                : "Published"
+            }
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About the Author</Text>
           <View style={styles.authorProfile}>
-            <View style={styles.authorAvatar}>
-              <Ionicons name="person" size={32} color={Colors.secondary} />
-            </View>
-            <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>Eleanor Whitfield</Text>
-              <Text style={styles.authorStat}>42 Books Published</Text>
-              <View style={styles.foundingBadge}>
-                <Text style={styles.foundingBadgeText}>Founding Author</Text>
+            {authorAvatarUrl ? (
+              <ExpoImage
+                source={{ uri: authorAvatarUrl }}
+                style={styles.authorAvatarImg}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+              />
+            ) : (
+              <View style={styles.authorAvatar}>
+                <Ionicons name="person" size={32} color={Colors.secondary} />
               </View>
+            )}
+            <View style={styles.authorInfo}>
+              <Text style={styles.authorName}>{resolvedAuthorName}</Text>
+              <Text style={styles.authorStat}>
+                {authorBookCount} {authorBookCount === 1 ? "Book" : "Books"}{" "}
+                Published
+              </Text>
+              {isFoundingAuthor && (
+                <View style={styles.foundingBadge}>
+                  <Text style={styles.foundingBadgeText}>Founding Author</Text>
+                </View>
+              )}
             </View>
           </View>
-          <Text style={styles.authorBio}>
-            Eleanor Whitfield is an award-winning novelist celebrated for her
-            lyrical prose and deeply moving narratives. With over four decades
-            of literary achievement, her works have been translated into 28
-            languages and have sold millions worldwide.
-          </Text>
+          <Text style={styles.authorBio}>{authorBio}</Text>
           <TouchableOpacity
             style={styles.viewProfileBtn}
             onPress={() =>
               navigation.navigate("AuthorProfile", {
-                authorId:
-                  (
-                    book as unknown as {
-                      authorId?: string;
-                      author?: { id?: string };
-                    }
-                  )?.authorId ||
-                  (book as unknown as { author?: { id?: string } })?.author
-                    ?.id ||
-                  "default-author",
-                authorName: book.author || "Eleanor Whitfield",
+                authorId: authorId || "default-author",
+                authorName: resolvedAuthorName,
+                authorBio: authorBio,
+                avatarUrl: authorAvatarUrl,
               })
             }
           >
@@ -765,7 +965,7 @@ export function BookDetailScreen({ route, navigation }: Props) {
                   </View>
 
                   <Text style={styles.modalSubtitle} numberOfLines={1}>
-                    {book.title}
+                    {activeBook.title}
                   </Text>
 
                   <ScrollView
@@ -935,6 +1135,27 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: Spacing.xxl },
 
   heroSection: { alignItems: "center", paddingVertical: Spacing.lg },
+  heroCoverWrapper: {
+    position: "relative",
+    alignItems: "center",
+  },
+  samplePill: {
+    position: "absolute",
+    bottom: 8,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  samplePillText: {
+    ...Typography.caption,
+    color: Colors.white,
+    fontWeight: "600",
+    fontSize: 11,
+  },
   heroImage: {
     width: 200,
     height: 260,
@@ -985,7 +1206,28 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: "700",
   },
-  actionRow: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
+  actionContainer: {
+    marginTop: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  samplePreviewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.secondary,
+    borderRadius: 24,
+    paddingVertical: 12,
+    backgroundColor: "#FEF3C7",
+  },
+  samplePreviewText: {
+    ...Typography.button,
+    color: Colors.secondary,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  actionRow: { flexDirection: "row", gap: Spacing.md },
   addToCartBtn: {
     flex: 1,
     borderWidth: 1.5,
@@ -1105,6 +1347,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
     alignItems: "center",
     justifyContent: "center",
+  },
+  authorAvatarImg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FEF3C7",
   },
   authorInfo: { flex: 1 },
   authorName: { ...Typography.h3, color: Colors.black, fontSize: 18 },

@@ -26,6 +26,10 @@ export interface BookReaderParams {
   author: string;
   coverUrl?: string;
   initialProgress?: number;
+  previewUrl?: string;
+  fileUrl?: string;
+  isPreview?: boolean;
+  description?: string;
 }
 
 export type HomeStackParamList = {

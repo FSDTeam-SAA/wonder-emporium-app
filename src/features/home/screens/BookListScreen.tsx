@@ -19,6 +19,7 @@ import type { HomeStackParamList } from "@/navigation/MainNavigator";
 import { useQuery } from "@tanstack/react-query";
 import { bookApi } from "@/api";
 import { useWishlistStore } from "@/store/wishlist.store";
+import { getAuthorDisplayName } from "@/utils";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "BookList">;
 
@@ -69,9 +70,7 @@ export function BookListScreen({ route, navigation }: Props) {
     ...b,
     id: b.id,
     title: b.title,
-    author: b.author?.profile?.firstName
-      ? `${b.author.profile.firstName} ${b.author.profile.lastName || ""}`.trim()
-      : b.author?.username || "Unknown Author",
+    author: getAuthorDisplayName(b),
     price:
       b.formats?.[0]?.listPrice != null &&
       !isNaN(Number(b.formats[0].listPrice))

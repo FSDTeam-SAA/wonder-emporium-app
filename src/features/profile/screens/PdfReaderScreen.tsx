@@ -69,7 +69,16 @@ With her quest fulfilled and the true history restored, she knew that the world 
 const TOTAL_PAGES = 140;
 
 export function PdfReaderScreen({ route, navigation }: Props) {
-  const { bookId, orderItemId, title, author } = route.params;
+  const {
+    bookId,
+    orderItemId,
+    title,
+    author,
+    previewUrl,
+    fileUrl,
+    isPreview,
+    description,
+  } = route.params;
 
   const setStoreProgress = useReaderStore((state) => state.setProgress);
   const theme = useReaderStore((state) => state.theme);
@@ -106,7 +115,14 @@ export function PdfReaderScreen({ route, navigation }: Props) {
     enabled: Boolean(orderItemId),
   });
 
-  const pdfUrl = accessRes?.url;
+  const effectiveFileUrl = previewUrl || fileUrl || accessRes?.url;
+  const isPdf =
+    Boolean(effectiveFileUrl) &&
+    Boolean(
+      effectiveFileUrl?.toLowerCase().endsWith(".pdf") ||
+      effectiveFileUrl?.toLowerCase().includes(".pdf?") ||
+      effectiveFileUrl?.toLowerCase().includes("/pdf"),
+    );
 
   // Save progress when page changes
   const saveProgress = useCallback(
@@ -158,15 +174,47 @@ export function PdfReaderScreen({ route, navigation }: Props) {
     }
   };
 
-  // Find active chapter based on current page
-  const currentChapter = useMemo(() => {
-    for (let i = CHAPTERS.length - 1; i >= 0; i--) {
-      if (currentPage >= CHAPTERS[i].page) {
-        return CHAPTERS[i];
+  // Generate dynamic chapters from real book description / content when available
+  const dynamicChapters = useMemo(() => {
+    if (description && description.trim().length > 20) {
+      const paras = description
+        .split(/\r?\n\r?\n|\r?\n/)
+        .map((p: string) => p.trim())
+        .filter((p: string) => p.length > 0);
+
+      if (paras.length > 0) {
+        const mid = Math.ceil(paras.length / 2);
+        return [
+          {
+            page: 1,
+            title: `Prologue: Overview`,
+            content: paras.slice(0, mid).join("\n\n"),
+          },
+          {
+            page: 15,
+            title: `Chapter 1: Excerpt`,
+            content: paras.slice(mid).join("\n\n"),
+          },
+          {
+            page: 30,
+            title: `Chapter 2: Reader Notes`,
+            content: `"${title}" by ${author} is published and distributed through Wonder Emporium.\n\nThis sample preview demonstrates the digital formatting and typography available in the full edition. Continue your reading journey with the complete edition!`,
+          },
+        ];
       }
     }
-    return CHAPTERS[0];
-  }, [currentPage]);
+    return CHAPTERS;
+  }, [description, title, author]);
+
+  // Find active chapter based on current page
+  const currentChapter = useMemo(() => {
+    for (let i = dynamicChapters.length - 1; i >= 0; i--) {
+      if (currentPage >= dynamicChapters[i].page) {
+        return dynamicChapters[i];
+      }
+    }
+    return dynamicChapters[0];
+  }, [currentPage, dynamicChapters]);
 
   // Theme color styles
   const themeStyles = useMemo(() => {
@@ -209,20 +257,20 @@ export function PdfReaderScreen({ route, navigation }: Props) {
     const bgCol = isDark ? "#121212" : isSepia ? "#FBF0D9" : "#FFFFFF";
     const textCol = isDark ? "#E0E0E0" : isSepia ? "#5F4B32" : "#2C3531";
 
-    if (pdfUrl) {
-      // Use PDF Viewer with fallback
+    if (effectiveFileUrl && isPdf) {
+      // Use PDF Viewer via Google Docs embedded viewer with fallback
       return `
         <!DOCTYPE html>
         <html>
           <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
             <style>
-              body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: ${bgCol}; }
+              body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: ${bgCol}; overflow: hidden; }
               iframe { width: 100%; height: 100%; border: none; }
             </style>
           </head>
           <body>
-            <iframe src="https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(pdfUrl)}"></iframe>
+            <iframe src="https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(effectiveFileUrl)}"></iframe>
           </body>
         </html>
       `;
@@ -282,6 +330,28 @@ export function PdfReaderScreen({ route, navigation }: Props) {
               font-weight: bold;
               color: ${isDark ? "#C6A34F" : isSepia ? "#8A5A2B" : "#134E4A"};
             }
+            .preview-end-card {
+              margin-top: 40px;
+              padding: 20px;
+              border-radius: 12px;
+              background-color: ${isDark ? "#1E1E1E" : isSepia ? "#F4E4C1" : "#F8F6F0"};
+              border: 1px solid ${isDark ? "#333" : isSepia ? "#E2CFAD" : "#EBE5D8"};
+              text-align: center;
+            }
+            .preview-end-title {
+              font-family: 'Inter', sans-serif;
+              font-size: 15px;
+              font-weight: 700;
+              color: ${isDark ? "#C6A34F" : "#134E4A"};
+              margin: 0 0 6px 0;
+            }
+            .preview-end-desc {
+              font-family: 'Inter', sans-serif;
+              font-size: 12px;
+              opacity: 0.8;
+              margin: 0;
+              line-height: 1.5;
+            }
           </style>
         </head>
         <body>
@@ -291,8 +361,18 @@ export function PdfReaderScreen({ route, navigation }: Props) {
           </div>
           ${currentChapter.content
             .split("\n\n")
-            .map((p) => `<p>${p.trim()}</p>`)
+            .map((p: string) => `<p>${p.trim()}</p>`)
             .join("")}
+          ${
+            isPreview
+              ? `
+              <div class="preview-end-card">
+                <div class="preview-end-title">End of Free Sample Preview</div>
+                <div class="preview-end-desc">To read the full edition of "${title}" by ${author}, return to the book details and complete your purchase.</div>
+              </div>
+            `
+              : ""
+          }
           <script>
             window.goToPage = function(p) {
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -301,12 +381,30 @@ export function PdfReaderScreen({ route, navigation }: Props) {
         </body>
       </html>
     `;
-  }, [theme, fontSize, title, currentChapter, pdfUrl]);
+  }, [
+    theme,
+    fontSize,
+    title,
+    author,
+    currentChapter,
+    effectiveFileUrl,
+    isPdf,
+    isPreview,
+  ]);
 
   const progressPercent = Math.round((currentPage / totalPages) * 100);
 
   return (
     <View style={[styles.container, { backgroundColor: themeStyles.bg }]}>
+      {isPreview && (
+        <View style={styles.previewNoticeBanner}>
+          <Ionicons name="book-outline" size={14} color="#FFFFFF" />
+          <Text style={styles.previewNoticeText}>
+            FREE E-BOOK SAMPLE PREVIEW
+          </Text>
+        </View>
+      )}
+
       {/* Top Navigation Bar */}
       <View
         style={[
@@ -314,6 +412,7 @@ export function PdfReaderScreen({ route, navigation }: Props) {
           {
             backgroundColor: themeStyles.cardBg,
             borderBottomColor: themeStyles.border,
+            paddingTop: isPreview ? 10 : 52,
           },
         ]}
       >
@@ -761,6 +860,22 @@ export function PdfReaderScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  previewNoticeBanner: {
+    backgroundColor: "#134E4A",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingTop: 48,
+    paddingBottom: 8,
+    paddingHorizontal: Spacing.md,
+  },
+  previewNoticeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
   topBar: {
     flexDirection: "row",
     alignItems: "center",

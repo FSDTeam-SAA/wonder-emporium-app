@@ -21,6 +21,7 @@ import { Spacing } from "@/styles/spacing";
 import bgImage from "@/assets/onboarding/onboarding bg.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cartApi, bookApi, authorApi, ordersApi } from "@/api";
+import { getAuthorDisplayName } from "@/utils";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { CartStackParamList } from "@/navigation/MainNavigator";
@@ -129,17 +130,21 @@ export function CartScreen() {
     authorsData?.data?.authors ||
     authorsData?.authors ||
     []
-  ).map((a: AuthorApiItem) => ({
-    id: a.id,
-    name: a.profile?.firstName
-      ? `${a.profile.firstName} ${a.profile.lastName}`
-      : a.username || "Author",
-    avatarUrl: a.profile?.avatarUrl || a.avatarUrl,
-    books: a.bookCount
-      ? `${a.bookCount} Book${a.bookCount > 1 ? "s" : ""}`
-      : "0 Books",
-    rating: "4.9",
-  }));
+  )
+    .filter((a: AuthorApiItem) => {
+      const u = (a.username || "").toLowerCase();
+      const fn = (a.profile?.firstName || "").toLowerCase();
+      return !u.includes("test") && !fn.includes("test");
+    })
+    .map((a: AuthorApiItem) => ({
+      id: a.id,
+      name: getAuthorDisplayName(a, "Founding Author"),
+      avatarUrl: a.profile?.avatarUrl || a.avatarUrl,
+      books: a.bookCount
+        ? `${a.bookCount} Book${a.bookCount > 1 ? "s" : ""}`
+        : "0 Books",
+      rating: "4.9",
+    }));
 
   const removeItemMutation = useMutation({
     mutationFn: (itemId: string) => cartApi.removeItem(itemId),
@@ -489,8 +494,14 @@ export function CartScreen() {
               <View style={{ padding: Spacing.md, alignItems: "center" }}>
                 <ActivityIndicator size="small" color={Colors.secondary} />
               </View>
+            ) : foundingAuthors.length === 0 ? (
+              <Text style={styles.emptyAuthorsText}>No authors found.</Text>
             ) : (
-              <View style={styles.authorsRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.authorsScrollContent}
+              >
                 {foundingAuthors.map((author) => (
                   <TouchableOpacity
                     key={author.id}
@@ -516,7 +527,7 @@ export function CartScreen() {
                       ) : (
                         <Ionicons
                           name="person"
-                          size={28}
+                          size={24}
                           color={Colors.secondary}
                         />
                       )}
@@ -550,10 +561,7 @@ export function CartScreen() {
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ))}
-                {foundingAuthors.length === 0 && (
-                  <Text style={styles.emptyAuthorsText}>No authors found.</Text>
-                )}
-              </View>
+              </ScrollView>
             )}
           </View>
         </ScrollView>
@@ -763,14 +771,16 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     color: Colors.gray[500],
   },
-  authorsRow: {
+  authorsScrollContent: {
     flexDirection: "row",
     gap: Spacing.md,
+    paddingRight: Spacing.md,
+    paddingBottom: Spacing.xs,
   },
   authorCard: {
-    flex: 1,
+    width: 148,
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: Spacing.md,
     alignItems: "center",
     shadowColor: Colors.black,
@@ -778,15 +788,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
   },
   authorAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: "#FEF3C7",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
     overflow: "hidden",
   },
   authorAvatarImage: {
@@ -795,12 +807,14 @@ const styles = StyleSheet.create({
   },
   authorName: {
     ...Typography.body,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
     color: Colors.black,
     textAlign: "center",
   },
   authorBooks: {
     ...Typography.caption,
+    fontSize: 11,
     color: Colors.gray[500],
     marginTop: 2,
   },
@@ -812,14 +826,15 @@ const styles = StyleSheet.create({
   },
   authorRatingText: {
     ...Typography.caption,
+    fontSize: 11,
     fontWeight: "600",
     color: Colors.secondary,
   },
   profileBtn: {
     backgroundColor: "#FEF3C7",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     marginTop: Spacing.sm,
     width: "100%",
     alignItems: "center",

@@ -18,6 +18,7 @@ import type { HomeStackParamList } from "@/navigation/MainNavigator";
 import { useQuery } from "@tanstack/react-query";
 import { authorApi, bookApi } from "@/api";
 import { useWishlistStore } from "@/store/wishlist.store";
+import { getAuthorDisplayName } from "@/utils";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AuthorProfile">;
 
@@ -171,9 +172,10 @@ const formatBookItem = (
   b: BookApiItem,
   defaultAuthorName?: string,
 ): FormattedBook => {
-  const author = b.author?.profile?.firstName
-    ? `${b.author.profile.firstName} ${b.author.profile.lastName}`
-    : b.author?.username || defaultAuthorName || "Wonder Emporium Author";
+  const author = getAuthorDisplayName(
+    b,
+    defaultAuthorName || "Wonder Emporium Author",
+  );
 
   const formatWithPrice = b.formats?.find(
     (f) => (f.listPrice ?? 0) > 0 || (f.sellingPrice ?? 0) > 0,
@@ -250,9 +252,10 @@ export function AuthorProfileScreen({ route, navigation }: Props) {
   const authorObj = authorData?.data || authorData;
   const profile = authorObj?.profile;
 
-  const authorName = profile?.firstName
-    ? `${profile.firstName} ${profile.lastName}`
-    : authorObj?.username || passedName || "Author";
+  const authorName = getAuthorDisplayName(
+    authorObj || { profile, name: passedName, username: authorObj?.username },
+    passedName || "Author",
+  );
 
   const avatarUrl = profile?.avatarUrl || authorObj?.avatarUrl || passedAvatar;
   const categories: string[] = authorObj?.categories || [];

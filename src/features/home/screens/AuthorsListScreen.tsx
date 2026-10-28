@@ -18,6 +18,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { HomeStackParamList } from "@/navigation/MainNavigator";
 import { useQuery } from "@tanstack/react-query";
 import { authorApi } from "@/api";
+import { getAuthorDisplayName } from "@/utils";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AuthorsList">;
 
@@ -48,18 +49,22 @@ export function AuthorsListScreen({ route, navigation }: Props) {
 
   const rawAuthors = authorsData?.data?.authors || authorsData?.authors || [];
 
-  const authors = rawAuthors.map((a: AuthorApiItem) => ({
-    id: a.id,
-    name: a.profile?.firstName
-      ? `${a.profile.firstName} ${a.profile.lastName}`
-      : a.username,
-    avatarUrl: a.profile?.avatarUrl || a.avatarUrl,
-    books: a.bookCount
-      ? `${a.bookCount} Book${a.bookCount > 1 ? "s" : ""}`
-      : "0 Books",
-    rating: "4.9",
-    bio: a.profile?.bio || "Founding Author at Wonder Emporium",
-  }));
+  const authors = rawAuthors
+    .filter((a: AuthorApiItem) => {
+      const u = (a.username || "").toLowerCase();
+      const fn = (a.profile?.firstName || "").toLowerCase();
+      return !u.includes("test") && !fn.includes("test");
+    })
+    .map((a: AuthorApiItem) => ({
+      id: a.id,
+      name: getAuthorDisplayName(a, "Founding Author"),
+      avatarUrl: a.profile?.avatarUrl || a.avatarUrl,
+      books: a.bookCount
+        ? `${a.bookCount} Book${a.bookCount > 1 ? "s" : ""}`
+        : "0 Books",
+      rating: "4.9",
+      bio: a.profile?.bio || "Founding Author at Wonder Emporium",
+    }));
 
   const handleAuthorPress = useCallback(
     (item: (typeof authors)[0]) => {

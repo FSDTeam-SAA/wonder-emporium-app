@@ -27,6 +27,7 @@ import {
 import { useReaderStore } from "@/store/reader.store";
 import { useQuery } from "@tanstack/react-query";
 import { libraryApi, LibraryItem } from "@/api";
+import { getAuthorDisplayName } from "@/utils";
 
 type ProfileNav = NativeStackNavigationProp<
   ProfileStackParamList,
@@ -714,10 +715,10 @@ export function ReadingChallengesScreen() {
                     const isAlreadyLogged = completedBookIds.includes(
                       item.book.id,
                     );
-                    const authorName =
-                      typeof item.book.author === "string"
-                        ? item.book.author
-                        : item.book.author?.username || "Wonder Author";
+                    const authorName = getAuthorDisplayName(
+                      item.book,
+                      "Wonder Author",
+                    );
                     return (
                       <TouchableOpacity
                         key={item.orderItemId || item.book.id}

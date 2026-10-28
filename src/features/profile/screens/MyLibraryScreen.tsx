@@ -20,6 +20,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { ProfileStackParamList } from "@/navigation/MainNavigator";
 import { useReaderStore } from "@/store";
+import { getAuthorDisplayName } from "@/utils";
 
 type ProfileNav = NativeStackNavigationProp<
   ProfileStackParamList,
@@ -114,21 +115,7 @@ export function MyLibraryScreen() {
           ? "READING"
           : "NOT_STARTED";
 
-      const author = b?.author;
-      let authorName = "Unknown Author";
-      if (typeof author === "string") {
-        authorName = author;
-      } else if (author && typeof author === "object") {
-        if (author.userProfile?.firstName) {
-          authorName =
-            `${author.userProfile.firstName} ${author.userProfile.lastName || ""}`.trim();
-        } else if (author.profile?.firstName) {
-          authorName =
-            `${author.profile.firstName} ${author.profile.lastName || ""}`.trim();
-        } else if (author.username) {
-          authorName = author.username;
-        }
-      }
+      const authorName = getAuthorDisplayName(b, "Unknown Author");
 
       return {
         id: bookId,
@@ -203,17 +190,49 @@ export function MyLibraryScreen() {
         )?.data) ||
     [];
 
-  const recommendedBooks = apiRecommended.map((b) => ({
-    id: b.id,
-    title: b.title || "Untitled Book",
-    author: b.author?.profile?.firstName
-      ? `${b.author.profile.firstName} ${b.author.profile.lastName || ""}`.trim()
-      : b.author?.username || "Unknown Author",
-    coverUrl:
-      b.bookCover ||
-      b.coverUrl ||
-      "https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=600",
-  }));
+  interface RecommendedBookItem {
+    id: string;
+    title?: string;
+    authorName?: string;
+    author?: {
+      username?: string;
+      profile?: { firstName?: string; lastName?: string };
+    };
+    bookCover?: string;
+    coverUrl?: string;
+    cover?: string;
+    formats?: Array<{ listPrice?: number }>;
+    sellingPrice?: number;
+    files?: Array<{ type?: string; url?: string }>;
+    [key: string]: unknown;
+  }
+
+  const recommendedBooks = (
+    apiRecommended as unknown as RecommendedBookItem[]
+  ).map((b) => {
+    const formatWithPrice = b.formats?.find((f) => (f.listPrice ?? 0) > 0);
+    const realPrice =
+      formatWithPrice?.listPrice != null &&
+      !isNaN(Number(formatWithPrice.listPrice))
+        ? `$${Number(formatWithPrice.listPrice).toFixed(2)}`
+        : b.sellingPrice != null
+          ? `$${Number(b.sellingPrice).toFixed(2)}`
+          : "Free";
+
+    return {
+      rawBook: b,
+      id: b.id,
+      title: b.title || "Untitled Book",
+      author: getAuthorDisplayName(b),
+      price: realPrice,
+      coverUrl:
+        b.bookCover ||
+        b.coverUrl ||
+        b.cover ||
+        b.files?.find((f) => f.type === "COVER")?.url ||
+        "https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=600",
+    };
+  });
 
   const handlePurchasedBookPress = (book: FormattedLibraryBook) => {
     if (book.type === "AUDIOBOOK") {
@@ -237,14 +256,18 @@ export function MyLibraryScreen() {
     }
   };
 
-  const handleRecommendedBookPress = (bookId: string, title: string) => {
+  const handleRecommendedBookPress = (
+    recItem: (typeof recommendedBooks)[0],
+  ) => {
     navigation.navigate("BookDetail", {
       book: {
-        id: bookId,
-        title,
-        author: "Author",
-        price: "$18.99",
+        ...recItem.rawBook,
+        id: recItem.id,
+        title: recItem.title,
+        author: recItem.author,
+        price: recItem.price,
         rating: "4.9",
+        coverUrl: recItem.coverUrl,
       },
     });
   };
@@ -500,7 +523,7 @@ export function MyLibraryScreen() {
                   <TouchableOpacity
                     key={b.id}
                     style={styles.bookCard}
-                    onPress={() => handleRecommendedBookPress(b.id, b.title)}
+                    onPress={() => handleRecommendedBookPress(b)}
                     activeOpacity={0.8}
                   >
                     <View style={styles.coverWrapper}>
@@ -518,6 +541,7 @@ export function MyLibraryScreen() {
                     <Text style={styles.bookAuthor} numberOfLines={1}>
                       {b.author}
                     </Text>
+                    <Text style={styles.bookPrice}>{b.price}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -790,5 +814,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
     textAlign: "center",
+  },
+  bookPrice: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: DARK_GREEN,
+    marginTop: 2,
   },
 });
